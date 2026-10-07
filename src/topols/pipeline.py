@@ -163,6 +163,8 @@ def fallback_block(circuit, block, block_info, idx_to_row, spread_num=0):
     hadamard_edges_ = dissolve_hadamard_boxes(graph_)
     layer_labels_ = layer_labeling_block_vanilla(graph_, block_range)
     layer_labels_ = idling_nodes_insertion_block_vanilla(graph_, layer_labels_, block_range, hadamard_edges_)
-    rematerialize_stranded_hadamards(graph_, layer_labels_, hadamard_edges_)
-    align_output_ports(graph_, layer_labels_)
+    # Only output ports inside the block (i.e. in the last block) are touched;
+    # see rematerialize_stranded_hadamards.
+    rematerialize_stranded_hadamards(graph_, layer_labels_, hadamard_edges_, max_row=block_range[1])
+    align_output_ports(graph_, layer_labels_, max_row=block_range[1])
     return graph_, layer_labels_, extract_io_nodes(graph_)

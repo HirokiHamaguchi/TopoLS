@@ -555,7 +555,7 @@ def extract_io_nodes(graph):
     return result
 
 
-def rematerialize_stranded_hadamards(graph, layer_labels, hadamard_edges):
+def rematerialize_stranded_hadamards(graph, layer_labels, hadamard_edges, max_row=None):
     """Give a cube back to a Hadamard left on the wire into an output port.
 
     dissolve_hadamard_boxes turns each Hadamard into a flag on the edge it
@@ -566,6 +566,13 @@ def rematerialize_stranded_hadamards(graph, layer_labels, hadamard_edges):
     inserted and the Hadamard would be lost, so it is restored as a box.
     Run after idle insertion. Mutates `graph`, `layer_labels` and
     `hadamard_edges` in place; returns the number of boxes restored.
+
+    `max_row` (block-scoped labellings, `pipeline.fallback_block`): only
+    output ports up to this row are considered. The ports sit on the
+    circuit's last row, so a block that ends earlier leaves them alone;
+    otherwise the port and its Hadamard would be pulled into that block and
+    its last layer would hold nothing but output ports, which the driver
+    reads as the end of the circuit.
     """
     boundary_by_qubit = {}
     for v in graph.vertices():
@@ -584,6 +591,8 @@ def rematerialize_stranded_hadamards(graph, layer_labels, hadamard_edges):
         a, b = ends
         port = a if a in output_boundaries else (b if b in output_boundaries else None)
         if port is None:
+            continue
+        if max_row is not None and graph.row(port) > max_row:
             continue
         other = b if port == a else a
         if not graph.connected(other, port):
@@ -611,7 +620,7 @@ def rematerialize_stranded_hadamards(graph, layer_labels, hadamard_edges):
     return restored
 
 
-def align_output_ports(graph, layer_labels):
+def align_output_ports(graph, layer_labels, max_row=None):
     """Put every qubit's output port on the same, last layer.
 
     The final seal colours the wires that are still open in the last layer's
@@ -620,8 +629,9 @@ def align_output_ports(graph, layer_labels):
     therefore unsealed. For every port earlier than the latest one, insert
     idles on its wire up to the last layer and move the port there. Ports
     whose wire node is unlabelled (outside a block-scoped labelling) are
-    left alone. Mutates `graph` and `layer_labels` in place; returns the
-    number of idles inserted.
+    left alone, and with `max_row` (block-scoped labellings) so are ports
+    beyond that row, i.e. outside the block. Mutates `graph` and
+    `layer_labels` in place; returns the number of idles inserted.
     """
     ports = []
     by_qubit = {}
@@ -631,6 +641,8 @@ def align_output_ports(graph, layer_labels):
     for _q, vs in by_qubit.items():
         vs = sorted(vs, key=graph.row)
         ports.extend(vs[1:])                       # every boundary but the input
+    if max_row is not None:
+        ports = [p for p in ports if graph.row(p) <= max_row]
     labelled = [p for p in ports if layer_labels.get(p) is not None]
     if not labelled:
         return 0
